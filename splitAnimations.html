@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>模型切换(FBX)</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+<div style="width: 100%; padding: 10px 0;">
+	<button style="margin-right: 10px; margin-left: 10px;" id="animation1">动画一</button>
+	<button style="margin-right: 10px;" id="animation2">动画二</button>
+	<button id="animation3">动画三</button>
+	<button id="allPlay">全动</button>
+	<button id="allStop">全停</button>
+</div>
+<div id="container"></div>
+<script type="module">
+  import * as THREE from './build/three.module.js'
+  import Stats from './jsm/libs/stats.module.js'
+  import {OrbitControls} from './jsm/controls/OrbitControls.js'
+  import {FBXLoader} from './jsm/loaders/FBXLoader.js'
+  import {GUI} from './jsm/libs/dat.gui.module.js'
+
+  var container, stats, controls, selectObject
+  var camera, scene, renderer, light
+  var clock = new THREE.Clock()
+  var mixer1, mixer2, mixer3, settings
+  var action1, action2, action3
+
+  init()
+  animate()
+
+  function init() {
+    container = document.getElementById('container')
+    document.body.appendChild(container)
+
+    // 相机位置（模型在视野内放大缩小）
+    camera = new THREE.PerspectiveCamera(800, window.innerWidth / window.innerHeight, 1000, 8000)
+    camera.position.set(0, 4500, 4500)
+
+		// 场景
+    scene = new THREE.Scene()
+    // scene.background = new THREE.Color(0xa0a0a0)
+    scene.background = new THREE.Color('#ddd')
+    // scene.fog = new THREE.Fog(0xa0a0a0, 200, 1000)
+
+		// 光源
+    light = new THREE.HemisphereLight(0xffffff, 0x444444)
+    light.position.set(0, 200, 0)
+    scene.add(light)
+
+    light = new THREE.DirectionalLight(0xffffff)
+    light.position.set(0, 200, 100)
+    light.castShadow = true
+    light.shadow.camera.top = 180
+    light.shadow.camera.bottom = -100
+    light.shadow.camera.left = -120
+    light.shadow.camera.right = 120
+    scene.add(light)
+
+    // scene.add( new CameraHelper( light.shadow.camera ) );
+
+    // ground
+    var mesh = new THREE.Mesh(new THREE.PlaneBufferGeometry(2000, 2000), new THREE.MeshPhongMaterial({
+      color: 0x999999,
+      depthWrite: false
+    }))
+    mesh.rotation.x = -Math.PI / 2
+    mesh.receiveShadow = true
+    scene.add(mesh)
+
+    // var grid = new THREE.GridHelper(2000, 20, 0x000000, 0x000000)
+    // grid.material.opacity = 0.2
+    // grid.material.transparent = true
+    // scene.add(grid)
+
+    // model 控制面板
+    createPanel()
+    gd1Test()
+    gd2Test()
+    gd3Test()
+    fixedTest()
+
+    renderer = new THREE.WebGLRenderer({antialias: true})
+    renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.setSize(window.innerWidth, window.innerHeight - 64)
+    renderer.shadowMap.enabled = true
+    container.appendChild(renderer.domElement)
+
+    controls = new OrbitControls(camera, renderer.domElement)
+    controls.target.set(0, 100, 0)
+    controls.update()
+
+    window.addEventListener('resize', onWindowResize, false)
+    window.addEventListener('dblclick', onMouseDblclick, false);
+
+    // 左上角帧数显示
+    // stats = new Stats();
+    // container.appendChild( stats.dom );
+  }
+
+  function createPanel() {
+    var panel = new GUI({width: 300})
+    var folder1 = panel.addFolder('速度调整')
+    settings = {
+      '调整速度': 1.0
+    }
+    folder1.add(settings, '调整速度', 0.0, 1.5, 0.01).onChange(modifyTimeScale)
+    folder1.open()
+  }
+
+  function modifyTimeScale(speed) {
+    mixer1.timeScale = speed
+    mixer2.timeScale = speed
+    mixer3.timeScale = speed
+  }
+
+  // 改变对象材质属性
+  function changeMaterial(object) {
+    object.material = new THREE.MeshLambertMaterial({
+      color: 0xffffff * Math.random(),
+      transparent: !object.material.transparent,
+      opacity: 0.8
+    });
+  }
+
+  // 获取与射线相交的对象数组
+  function getIntersects(event) {
+    event.preventDefault();
+
+    // 声明 raycaster 和 mouse 变量
+    var raycaster = new THREE.Raycaster();
+    var mouse = new THREE.Vector2();
+
+    // 通过鼠标点击位置,计算出 raycaster 所需点的位置,以屏幕为中心点,范围 -1 到 1
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    //通过鼠标点击的位置(二维坐标)和当前相机的矩阵计算出射线位置
+    raycaster.setFromCamera(mouse, camera);
+
+    // 获取与射线相交的对象数组，其中的元素按照距离排序，越近的越靠前
+    var intersects = raycaster.intersectObjects(scene.children);
+
+    //返回选中的对象
+    return intersects;
+  }
+
+  function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight
+    camera.updateProjectionMatrix()
+    renderer.setSize(window.innerWidth, window.innerHeight)
+  }
+
+  function onMouseDblclick(event) {
+    // 获取 raycaster 和所有模型相交的数组，其中的元素按照距离排序，越近的越靠前
+    var intersects = getIntersects(event);
+    // 获取选中最近的 Mesh 对象
+    if (intersects.length !== 0 && intersects[0].object instanceof THREE.Mesh) {
+      selectObject = intersects[0].object;
+      changeMaterial(selectObject);
+    } else {
+      alert('未选中 Mesh!');
+    }
+	}
+
+  function animate() {
+    requestAnimationFrame(animate)
+    var delta = clock.getDelta()
+    if (mixer1) mixer1.update(delta)
+    if (mixer2) mixer2.update(delta)
+    if (mixer3) mixer3.update(delta)
+    renderer.render(scene, camera)
+    // stats.update();
+  }
+
+
+
+  function gd1Test() {
+    // 管道1
+    var loader = new FBXLoader()
+    loader.load('models/fbx/gd1.fbx', function (object) {
+      mixer1 = new THREE.AnimationMixer(object)
+      action1 = mixer1.clipAction(object.animations[0])
+      action1.play()
+      scene.add(object)
+    })
+  }
+
+  function gd2Test() {
+    // 管道2
+    var loader = new FBXLoader()
+    loader.load('models/fbx/gd2.fbx', function (object) {
+      console.log('object', object);
+      mixer2 = new THREE.AnimationMixer(object)
+      action2 = mixer2.clipAction(object.animations[0])
+      action2.play()
+      scene.add(object)
+    })
+  }
+
+  function gd3Test() {
+    // 管道3
+    var loader = new FBXLoader()
+    loader.load('models/fbx/gd3.fbx', function (object) {
+      mixer3 = new THREE.AnimationMixer(object)
+      action3 = mixer3.clipAction(object.animations[0])
+      action3.play()
+      scene.add(object)
+    })
+  }
+
+  function fixedTest() {
+    // 固定物体
+    var loader = new FBXLoader()
+    loader.load('models/fbx/fixed.fbx', function (object) {
+      object.traverse(function (child) {
+        if (child.isMesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+        }
+      })
+      scene.add(object)
+    })
+  }
+  // 监听按钮点击事件
+  var jumpingButton = document.getElementById('animation1')
+  jumpingButton.onclick = function () {
+    action2.stop()
+    action3.stop()
+    action1.play()
+  }
+  var dancingButton = document.getElementById('animation2')
+  dancingButton.onclick = function () {
+    action1.stop()
+		action3.stop()
+    action2.play()
+  }
+  var turnAroundButton = document.getElementById('animation3')
+  turnAroundButton.onclick = function () {
+    action1.stop()
+		action2.stop()
+    action3.play()
+  }
+  var allPlayButton = document.getElementById('allPlay')
+  allPlayButton.onclick = function () {
+    action1.play()
+    action2.play()
+    action3.play()
+  }
+  var allStopButton = document.getElementById('allStop')
+  allStopButton.onclick = function () {
+    action1.stop()
+    action2.stop()
+    action3.stop()
+  }
+</script>
+</body>
+</html>
