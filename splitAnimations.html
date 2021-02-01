@@ -5,6 +5,20 @@
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 	<link type="text/css" rel="stylesheet" href="main.css">
+	<style>
+		.test-text {
+			position: absolute;
+			width: 150px;
+			height: 80px;
+			z-index: 100;
+			background-color: rgba(255, 255, 255, 0.8);
+			color: #2fa1d6;
+			border: 1px solid #2fa1d6;
+			padding: 5px;
+			border-radius: 4px;
+			box-sizing: border-box;
+		}
+	</style>
 </head>
 <body>
 <div style="width: 100%; padding: 10px 0;">
@@ -14,16 +28,26 @@
 	<button id="allPlay">全动</button>
 	<button id="allStop">全停</button>
 </div>
+<div id="label" style="visibility: hidden">
+	<div style="position: relative">
+		<div style="position: absolute; top: -120px; left: 20px; width: 100px; color: #2fa1d6;">
+		</div>
+		<div style="position: absolute; top: -100px; left: 0;">
+			<img src="./static/images/blueModal.png" alt="">
+		</div>
+	</div>
+</div>
+<div id="test"></div>
 <div id="container"></div>
 <script type="module">
   import * as THREE from './build/three.module.js'
-  import Stats from './jsm/libs/stats.module.js'
-  import {OrbitControls} from './jsm/controls/OrbitControls.js'
-  import {FBXLoader} from './jsm/loaders/FBXLoader.js'
-  import {GUI} from './jsm/libs/dat.gui.module.js'
+	import { CSS2DObject, CSS2DRenderer } from './jsm/renderers/CSS2DRenderer.js';
+  import { OrbitControls } from './jsm/controls/OrbitControls.js'
+  import { FBXLoader } from './jsm/loaders/FBXLoader.js'
+  import { GUI } from './jsm/libs/dat.gui.module.js'
 
-  var container, stats, controls, selectObject
-  var camera, scene, renderer, light
+  var container, controls, selectObject
+  var camera, scene, renderer, labelRenderer, light
   var clock = new THREE.Clock()
   var mixer1, mixer2, mixer3, settings
   var action1, action2, action3
@@ -85,15 +109,21 @@
     renderer = new THREE.WebGLRenderer({antialias: true})
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(window.innerWidth, window.innerHeight - 64)
-    renderer.shadowMap.enabled = true
+    // renderer.shadowMap.enabled = true
     container.appendChild(renderer.domElement)
 
-    controls = new OrbitControls(camera, renderer.domElement)
+    labelRenderer = new CSS2DRenderer();
+    labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    labelRenderer.domElement.style.position = 'absolute';
+    labelRenderer.domElement.style.top = '0px';
+    container.appendChild(labelRenderer.domElement);
+
+    controls = new OrbitControls(camera, labelRenderer.domElement)
     controls.target.set(0, 100, 0)
     controls.update()
 
     window.addEventListener('resize', onWindowResize, false)
-    window.addEventListener('dblclick', onMouseDblclick, false);
+    // window.addEventListener('click', onMouseClick, false);
 
     // 左上角帧数显示
     // stats = new Stats();
@@ -117,12 +147,20 @@
   }
 
   // 改变对象材质属性
-  function changeMaterial(object) {
-    object.material = new THREE.MeshLambertMaterial({
-      color: 0xffffff * Math.random(),
-      transparent: !object.material.transparent,
-      opacity: 0.8
-    });
+  function changeMaterial(object, event) {
+    // object.material = new THREE.MeshLambertMaterial({
+    //   color: 0xffffff * Math.random(),
+    //   transparent: !object.material.transparent,
+    //   opacity: 0.8
+    // });
+    // 添加文本模态框显示文本框
+    var testContainer = document.getElementById('test');
+    testContainer.className = 'test-text';
+    testContainer.innerText = '当前流量：50L/s';
+    var testLabel = new CSS2DObject(testContainer);
+    testLabel.position.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1, 0.5);
+    scene.add(testLabel);
+    // console.log('testLabel', testLabel);
   }
 
   // 获取与射线相交的对象数组
@@ -137,11 +175,20 @@
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-    //通过鼠标点击的位置(二维坐标)和当前相机的矩阵计算出射线位置
+    // 通过鼠标点击的位置(二维坐标)和当前相机的矩阵计算出射线位置
     raycaster.setFromCamera(mouse, camera);
 
+    // 找到场景中所有外部模型
+    var scensObjs = [];
+    scene.children.forEach(child => {
+      for (var i = 0; i < child.children.length; i++) {
+        var obj = child.children[i];
+        scensObjs.push(obj);
+      }
+    });
+
     // 获取与射线相交的对象数组，其中的元素按照距离排序，越近的越靠前
-    var intersects = raycaster.intersectObjects(scene.children);
+    var intersects = raycaster.intersectObjects(scensObjs);
 
     //返回选中的对象
     return intersects;
@@ -151,17 +198,21 @@
     camera.aspect = window.innerWidth / window.innerHeight
     camera.updateProjectionMatrix()
     renderer.setSize(window.innerWidth, window.innerHeight)
+    labelRenderer.setSize( window.innerWidth, window.innerHeight );
   }
 
-  function onMouseDblclick(event) {
+	function onMouseClick(event) {
+    // 先隐藏文本框
+    var testContainer = document.getElementById('test');
+    testContainer.style.display = 'none';
     // 获取 raycaster 和所有模型相交的数组，其中的元素按照距离排序，越近的越靠前
     var intersects = getIntersects(event);
     // 获取选中最近的 Mesh 对象
     if (intersects.length !== 0 && intersects[0].object instanceof THREE.Mesh) {
       selectObject = intersects[0].object;
-      changeMaterial(selectObject);
+      changeMaterial(selectObject, event);
     } else {
-      alert('未选中 Mesh!');
+      // alert('未选中 Mesh!');
     }
 	}
 
@@ -172,10 +223,18 @@
     if (mixer2) mixer2.update(delta)
     if (mixer3) mixer3.update(delta)
     renderer.render(scene, camera)
+    labelRenderer.render(scene, camera);
     // stats.update();
   }
 
-
+	// 初始化显示的框框
+	function getViewModal(showText) {
+    var text = document.getElementById('label').cloneNode(true);
+    text.style.visibility = 'visible';
+    // text.className = 'test-text';
+    text.childNodes[1].childNodes[1].textContent = showText + '：50L/s';
+    return new CSS2DObject(text);
+  }
 
   function gd1Test() {
     // 管道1
@@ -184,6 +243,10 @@
       mixer1 = new THREE.AnimationMixer(object)
       action1 = mixer1.clipAction(object.animations[0])
       action1.play()
+      var testLabel = getViewModal('管道一', object);
+      console.log('管道一', object);
+      testLabel.position.set(object.children[0].position.x, object.children[0].position.y, object.children[0].position.z);
+      object.add(testLabel);
       scene.add(object)
     })
   }
@@ -192,10 +255,13 @@
     // 管道2
     var loader = new FBXLoader()
     loader.load('models/fbx/gd2.fbx', function (object) {
-      console.log('object', object);
       mixer2 = new THREE.AnimationMixer(object)
       action2 = mixer2.clipAction(object.animations[0])
       action2.play()
+      var testLabel = getViewModal('管道二');
+      console.log('管道二', object);
+      testLabel.position.set(object.children[3].position.x, object.children[3].position.y, object.children[3].position.z);
+      object.add(testLabel);
       scene.add(object)
     })
   }
@@ -207,6 +273,10 @@
       mixer3 = new THREE.AnimationMixer(object)
       action3 = mixer3.clipAction(object.animations[0])
       action3.play()
+      var testLabel = getViewModal('管道三');
+      console.log('管道三', object);
+      testLabel.position.set(object.children[2].position.x, object.children[2].position.y, object.children[2].position.z);
+      object.add(testLabel);
       scene.add(object)
     })
   }
