@@ -51,6 +51,7 @@
   var clock = new THREE.Clock()
   var mixer1, mixer2, mixer3, settings
   var action1, action2, action3
+	var inputObjList = [];
 
   init()
   animate()
@@ -123,7 +124,7 @@
     controls.update()
 
     window.addEventListener('resize', onWindowResize, false)
-    // window.addEventListener('click', onMouseClick, false);
+    window.addEventListener('click', onMouseClick, false);
 
     // 左上角帧数显示
     // stats = new Stats();
@@ -148,19 +149,13 @@
 
   // 改变对象材质属性
   function changeMaterial(object, event) {
-    // object.material = new THREE.MeshLambertMaterial({
-    //   color: 0xffffff * Math.random(),
-    //   transparent: !object.material.transparent,
-    //   opacity: 0.8
-    // });
+    object.material = new THREE.MeshLambertMaterial({
+      color: 0xffffff * Math.random(),
+      transparent: !object.material.transparent,
+      opacity: 0.8
+    });
     // 添加文本模态框显示文本框
-    var testContainer = document.getElementById('test');
-    testContainer.className = 'test-text';
-    testContainer.innerText = '当前流量：50L/s';
-    var testLabel = new CSS2DObject(testContainer);
-    testLabel.position.set((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1, 0.5);
-    scene.add(testLabel);
-    // console.log('testLabel', testLabel);
+    getViewModal('管道', object, event);
   }
 
   // 获取与射线相交的对象数组
@@ -202,9 +197,6 @@
   }
 
 	function onMouseClick(event) {
-    // 先隐藏文本框
-    var testContainer = document.getElementById('test');
-    testContainer.style.display = 'none';
     // 获取 raycaster 和所有模型相交的数组，其中的元素按照距离排序，越近的越靠前
     var intersects = getIntersects(event);
     // 获取选中最近的 Mesh 对象
@@ -212,7 +204,10 @@
       selectObject = intersects[0].object;
       changeMaterial(selectObject, event);
     } else {
-      // alert('未选中 Mesh!');
+      // 未点击时清除
+      for (let i = 0; i < inputObjList.length; i++) {
+        scene.remove(inputObjList[i]);
+      }
     }
 	}
 
@@ -228,12 +223,17 @@
   }
 
 	// 初始化显示的框框
-	function getViewModal(showText) {
+	function getViewModal(showText, object, event) {
     var text = document.getElementById('label').cloneNode(true);
     text.style.visibility = 'visible';
-    // text.className = 'test-text';
     text.childNodes[1].childNodes[1].textContent = showText + '：50L/s';
-    return new CSS2DObject(text);
+    var testLabel = new CSS2DObject(text);
+    console.log('event.clientX', event.clientX);
+    console.log('event.clientY', event.clientY);
+    console.log('object', object);
+    testLabel.position.set(object.position.x, object.position.y, object.position.z);
+    inputObjList.push(testLabel);
+    scene.add(testLabel);
   }
 
   function gd1Test() {
@@ -243,10 +243,7 @@
       mixer1 = new THREE.AnimationMixer(object)
       action1 = mixer1.clipAction(object.animations[0])
       action1.play()
-      var testLabel = getViewModal('管道一', object);
       console.log('管道一', object);
-      testLabel.position.set(object.children[0].position.x, object.children[0].position.y, object.children[0].position.z);
-      object.add(testLabel);
       scene.add(object)
     })
   }
@@ -258,10 +255,7 @@
       mixer2 = new THREE.AnimationMixer(object)
       action2 = mixer2.clipAction(object.animations[0])
       action2.play()
-      var testLabel = getViewModal('管道二');
       console.log('管道二', object);
-      testLabel.position.set(object.children[3].position.x, object.children[3].position.y, object.children[3].position.z);
-      object.add(testLabel);
       scene.add(object)
     })
   }
@@ -273,10 +267,7 @@
       mixer3 = new THREE.AnimationMixer(object)
       action3 = mixer3.clipAction(object.animations[0])
       action3.play()
-      var testLabel = getViewModal('管道三');
       console.log('管道三', object);
-      testLabel.position.set(object.children[2].position.x, object.children[2].position.y, object.children[2].position.z);
-      object.add(testLabel);
       scene.add(object)
     })
   }
